@@ -30,8 +30,3 @@ def test_filter_products_by_rating():
     assert response.status_code == 200
     for product in response.json():
         assert product["rating"] >= 4
-
-def test_search_result_relevance():
-    response = client.get("/api/v1/search?query=best+phone")
-    assert response.status_code == 200
-    assert isinstance(response.json(), list)

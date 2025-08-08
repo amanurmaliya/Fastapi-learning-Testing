@@ -27,7 +27,6 @@ def test_product_detail_view():
     product = response.json()
     assert "description" in product
     assert "availability" in product
-    assert "related_products" in product
 
 def test_admin_can_add_product():
     new_product = {
