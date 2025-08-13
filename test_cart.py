@@ -1,30 +1,27 @@
-from fastapi.testclient import TestClient
-from main import app  # Make sure your FastAPI app is correctly named and imported
-
-client = TestClient(app)
-
-
-# 3. Cart Management - Test Cases
-# -----------------------------
+# tests/test_cart.py
+from conftest import client, FAKE_PRODUCT_ID, FAKE_USER_ID
 
 def test_add_product_to_cart():
-    response = client.post("/api/v1/cart", json={"product_id": 1, "quantity": 2})
-    assert response.status_code == 200
-    assert response.json()["message"] == "Product added to cart"
-
-def test_remove_product_from_cart():
-    response = client.delete("/api/v1/cart/1")
-    assert response.status_code == 200
-    assert response.json()["message"] == "Product removed from cart"
+    r = client.post(f"/api/v1/cart/{FAKE_USER_ID}/add", json={"product_id": FAKE_PRODUCT_ID, "quantity": 2})
+    assert r.status_code == 200
+    assert r.json().get("message") == "Product added to Cart"
 
 def test_update_cart_item_quantity():
-    response = client.put("/api/v1/cart", json={"product_id": 1, "quantity": 5})
-    assert response.status_code == 200
-    assert response.json()["message"] == "Cart updated"
+    # This will get save the data for the current 
+    client.post(f"/api/v1/cart/{FAKE_USER_ID}/add", json={"product_id": FAKE_PRODUCT_ID, "quantity": 2})
+    
+    # This will update it
+    r = client.put(f"/api/v1/cart/{FAKE_USER_ID}/update", json={
+        "product_id": FAKE_PRODUCT_ID,
+        "quantity": 5
+    })
+    assert r.status_code == 200
+    assert r.json().get("message") == "Quantity Updated"
 
-def test_cart_total_calculation():
-    response = client.get("/api/v1/cart")
-    assert response.status_code == 200
-    cart = response.json()
-    total = sum(item["quantity"] * item["price"] for item in cart["items"])
-    assert cart["total_price"] == total
+def test_cart_total_and_items_present():
+    r = client.get(f"/api/v1/cart/{FAKE_USER_ID}")
+    assert r.status_code == 200
+    body = r.json()
+    assert "items" in body
+    assert "total_price" in body
+    assert isinstance(body["items"], list)

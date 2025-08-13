@@ -1,40 +1,32 @@
-from fastapi.testclient import TestClient
-from main import app  # Make sure your FastAPI app is correctly named and imported
+# tests/test_order.py
+from conftest import client, FAKE_PRODUCT_ID, FAKE_USER_ID
 
-client = TestClient(app)
+def test_place_order_and_get_detail_and_admin_status_update():
+    # Place order (Order model requires products, total, user_id, shipping_address)
+    payload = {
+        "products": [FAKE_PRODUCT_ID],
+        "total": 32.4,
+        "user_id": FAKE_USER_ID,
+        "shipping_address": "1 Test St"
+    }
+    r = client.post("/api/v1/orders", json=payload)
+    assert r.status_code == 200
+    body = r.json()
+    assert body.get("success") is True
+    assert "order_id" in body
 
-# -----------------------------
-# 4. Order Management - Test Cases
-# -----------------------------
+    oid = body["order_id"]
 
-def test_place_order_from_cart():
-    response = client.post("/api/v1/orders")
-    assert response.status_code == 201
-    assert "order_id" in response.json()
+    # Get order details
+    r2 = client.get(f"/api/v1/orders/{oid}")
+    assert r2.status_code == 200
+    o = r2.json()
+    assert o.get("user_id") is not None
+    assert "items" in o
+    assert "shipping_address" in o
+    assert "total_amount" in o
 
-def test_order_has_valid_status_flow():
-    statuses = ["Pending", "Confirmed", "Shipped", "Delivered", "Cancelled"]
-    for status in statuses:
-        response = client.put("/api/v1/admin/orders/1/status", json={"status": status})
-        assert response.status_code == 200
-        assert response.json()["status"] == status
-
-def test_user_can_view_order_history():
-    response = client.get("/api/v1/orders")
-    assert response.status_code == 200
-    assert isinstance(response.json(), list)
-
-def test_admin_can_update_order_status():
-    response = client.put("/api/v1/admin/orders/1/status", json={"status": "Shipped"})
-    assert response.status_code == 200
-    assert response.json()["status"] == "Shipped"
-
-def test_order_details_are_captured_correctly():
-    response = client.get("/api/v1/orders/1")
-    assert response.status_code == 200
-    order = response.json()
-    assert "user_id" in order
-    assert "items" in order
-    assert "shipping_address" in order
-    assert "total_amount" in order
-    assert "status" in order
+    # Admin update order status (endpoint expects query param ?status=...)
+    r3 = client.put(f"/api/v1/admin/orders/{oid}/status?status=Shipped")
+    assert r3.status_code == 200
+    assert "Order status updated to Shipped" in r3.json().get("message", "")

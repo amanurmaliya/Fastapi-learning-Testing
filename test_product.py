@@ -1,53 +1,77 @@
-from fastapi.testclient import TestClient
-from main import app  # Make sure your FastAPI app is correctly named and imported
-
-client = TestClient(app)
-
-# -------------------------------
-# 1. Product Listing - Test Cases
-# -------------------------------
+# tests/test_product.py
+from conftest import client, FAKE_PRODUCT_ID, FAKE_USER_ID  # conftest lives in the same folder for pytest discovery
+import json
 
 def test_product_list_pagination():
-    response = client.get("/api/v1/products?page=1&limit=10")
-    assert response.status_code == 200
-    assert len(response.json()) <= 10
+    """
+    Calls:   GET /api/v1/product-list?page=1&limit=10
+    Asserts: 200 and <= 10 items
+    """
+    r = client.get("/api/v1/product-list?page=1&limit=10")
+    assert r.status_code == 200
+    assert isinstance(r.json(), list)
+    assert len(r.json()) <= 10
 
 def test_product_display_attributes():
-    response = client.get("/api/v1/products")
-    assert response.status_code == 200
-    for product in response.json():
-        assert "name" in product
-        assert "image" in product
-        assert "price" in product
-        assert "rating" in product
+    """
+    Calls:   GET /api/v1/product-list
+    Asserts: each product has expected keys
+    """
+    r = client.get("/api/v1/product-list")
+    assert r.status_code == 200
+    items = r.json()
+    assert len(items) >= 1
+    for p in items:
+        # product model uses `image_url` (consistent with product_models.py).
+        assert "name" in p
+        assert "price" in p
+        assert "rating" in p
+        assert "image_url" in p
 
-def test_product_detail_view():
-    response = client.get("/api/v1/products/1")
-    assert response.status_code == 200
-    product = response.json()
-    assert "description" in product
-    assert "availability" in product
+def test_product_detail_view_and_update_and_delete_and_add():
+    """
+    Full small flow using product id returned from product-list:
+    - GET detail
+    - POST update (product_routes uses POST for update)
+    - DELETE product
+    - POST add product
+    """
+    # 1) get product list and pick an id
+    r = client.get("/api/v1/product-list")
+    assert r.status_code == 200
+    pid = r.json()[0]["id"]
 
-def test_admin_can_add_product():
-    new_product = {
+    # 2) detail
+    r2 = client.get(f"/api/v1/product/{pid}")
+    assert r2.status_code == 200
+    p = r2.json()
+    assert "description" in p
+    assert "id" in p
+
+    # 3) update (product_routes uses POST /product/{id} for update)
+    update_payload = {**p, "price": 99.99}
+    # update_payload["_id"] = str(pid["_id"])  # Ensure serializable
+    
+    r3 = client.post(f"/api/v1/product/{pid}", json=update_payload)
+    assert r3.status_code == 200
+    assert r3.json().get("message") == "Product updated successfully"
+
+    # 4) delete
+    r4 = client.delete(f"/api/v1/product/{pid}")
+    assert r4.status_code == 200
+    assert "Product Deleted Successfully" in r4.json().get("message", "")
+
+    # 5) add new product (admin-only in code; our fake admin dependency allows it)
+    new_prod = {
+        "_id": "507f1f77bcf86cd799439015",
         "name": "Test Product",
-        "description": "Test Description",
         "price": 100,
-        "image_url": "http://example.com/image.jpg",
-        "category": "Electronics",
-        "rating": 4.5,
-        "stock": 10
+        "description": "Test",
+        "stock": 5,
+        "image_url": "http://example.com/x.jpg",
+        "category": "Test",
+        "rating": 4.2
     }
-    response = client.post("/api/v1/admin/products", json=new_product)
-    assert response.status_code == 201
-    assert response.json()["name"] == "Test Product"
-
-def test_admin_can_update_product():
-    update_data = {"price": 150}
-    response = client.put("/api/v1/admin/products/1", json=update_data)
-    assert response.status_code == 200
-    assert response.json()["price"] == 150
-
-def test_admin_can_delete_product():
-    response = client.delete("/api/v1/admin/products/1")
-    assert response.status_code == 204
+    r5 = client.post("/api/v1/add-product", json=new_prod)
+    assert r5.status_code == 200
+    assert r5.json().get("success") is True
